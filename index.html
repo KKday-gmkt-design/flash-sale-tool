@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flash Sale 行事曆產生器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #ffffff; --bg2: #f7f6f3; --bg3: #f0efe9;
+  --text: #1a1a1a; --text2: #555; --text3: #999;
+  --border: #e0dfd8; --border2: #ccc;
+  --radius-sm: 5px; --radius-md: 8px; --radius-lg: 12px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: var(--bg3); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── top bar ── */
+.topbar { background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 16px; height: 44px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 10; }
+.topbar-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.vtoggle { display: flex; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; }
+.vbtn { padding: 4px 12px; font-size: 11px; cursor: pointer; border: none; background: none; color: var(--text2); }
+.vbtn.active { background: #1a1a2e; color: #fff; }
+.dl-btn { padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border2); background: var(--bg); color: var(--text2); display: flex; align-items: center; gap: 4px; }
+.dl-btn:hover { background: var(--bg2); }
+.dl-btn.primary { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+.dl-btn.primary:hover { background: #2d2d4a; }
+.dl-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── main layout ── */
+.app { display: grid; grid-template-columns: 220px 272px 1fr; flex: 1; overflow: hidden; }
+.panel { background: var(--bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.panel-header { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+.panel-title { font-size: 10px; font-weight: 600; letter-spacing: .07em; color: var(--text3); text-transform: uppercase; }
+.panel-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.preview-panel { background: var(--bg3); overflow: auto; padding: 20px; }
+
+/* ── token sections ── */
+.tok-section { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.tok-section-head { padding: 5px 9px; font-size: 10px; font-weight: 600; color: var(--text2); background: var(--bg2); border-bottom: 1px solid var(--border); letter-spacing: .04em; }
+.tok-section-body { padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+.tok-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tok-label { font-size: 11px; color: var(--text2); flex: 1; }
+.tok-color { display: flex; align-items: center; gap: 4px; }
+.swatch { width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--border2); cursor: pointer; flex-shrink: 0; padding: 0; }
+.tok-hex { width: 62px; font-size: 10px; font-family: 'SF Mono', monospace; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; color: var(--text); }
+.tok-num { width: 50px; font-size: 11px; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; color: var(--text); }
+
+/* ── editor inputs ── */
+.field-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+input[type=text], textarea, select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+  padding: 4px 7px; font-size: 11px; color: var(--text); font-family: inherit; resize: none;
+}
+input[type=text]:focus, textarea:focus, select:focus { outline: none; border-color: #888; }
+textarea { height: 38px; line-height: 1.4; }
+
+/* ── day card ── */
+.day-card { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.day-head { background: var(--bg2); padding: 7px 9px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; border-bottom: 1px solid var(--border); }
+.day-head-label { font-size: 11px; font-weight: 600; color: var(--text); }
+.day-body { padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+
+/* ── slot editor ── */
+.slot-ed { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; cursor: grab; }
+.slot-ed.dragging { opacity: .35; }
+.slot-ed.drag-over { outline: 2px solid #D85A30; outline-offset: 1px; }
+.slot-ed-head { padding: 5px 7px; display: flex; align-items: center; gap: 5px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.drag-handle { font-size: 13px; color: var(--text3); cursor: grab; user-select: none; }
+.slot-ed-label { font-size: 10px; color: var(--text2); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.layout-toggle { display: flex; border: 1px solid var(--border2); border-radius: 5px; overflow: hidden; flex-shrink: 0; }
+.layout-btn { padding: 2px 8px; font-size: 10px; background: none; border: none; color: var(--text2); cursor: pointer; }
+.layout-btn.active { background: #1a1a2e; color: #fff; }
+.slot-ed-body { padding: 7px 8px; display: flex; flex-direction: column; gap: 5px; background: var(--bg); }
+.split-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.split-col { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; display: flex; flex-direction: column; gap: 3px; background: var(--bg2); }
+.split-col-title { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; margin-bottom: 2px; }
+
+/* ── promo editor ── */
+.promo-section { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.promo-section-head { background: var(--bg2); padding: 6px 9px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.promo-section-title { font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; }
+.promo-section-body { padding: 7px 9px; display: flex; flex-direction: column; gap: 5px; background: var(--bg); }
+.promo-row-ed { display: flex; align-items: flex-end; gap: 5px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 7px; }
+
+/* ── buttons ── */
+.btn-xs { background: none; border: 1px solid var(--border2); border-radius: 4px; padding: 2px 7px; font-size: 10px; color: var(--text2); cursor: pointer; flex-shrink: 0; }
+.btn-xs:hover { background: var(--bg2); }
+.btn-add { width: 100%; background: none; border: 1px dashed var(--border2); border-radius: var(--radius-sm); padding: 5px; font-size: 10px; color: var(--text2); cursor: pointer; }
+.btn-add:hover { background: var(--bg2); }
+.hr { height: 1px; background: var(--border); }
+
+/* ── frames ── */
+.frames-wrap { display: flex; flex-direction: column; gap: 24px; }
+.frame-label { font-size: 10px; color: var(--text3); margin-bottom: 6px; letter-spacing: .04em; }
+.frame-box { background: #fff; border: 1px solid #ddd; border-radius: 12px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-title">Flash Sale 行事曆產生器</div>
+  <div class="topbar-right">
+    <div class="vtoggle">
+      <button class="vbtn active" onclick="sv('both')" id="vbtn-both">兩者</button>
+      <button class="vbtn" onclick="sv('mobile')" id="vbtn-mobile">Mobile</button>
+      <button class="vbtn" onclick="sv('pc')" id="vbtn-pc">PC</button>
+    </div>
+    <button class="dl-btn primary" onclick="dlFrame('mobile')" id="dl-m">↓ Mobile PNG</button>
+    <button class="dl-btn primary" onclick="dlFrame('pc')" id="dl-p">↓ PC PNG</button>
+    <button class="dl-btn" onclick="dlFrame('both')" id="dl-b">↓ 兩者合併</button>
+  </div>
+</div>
+
+<div class="app">
+
+<!-- COL 1: TOKENS -->
+<div class="panel">
+  <div class="panel-header"><div class="panel-title">Design Tokens</div></div>
+  <div class="panel-body">
+
+    <div class="tok-section">
+      <div class="tok-section-head">主色 / 邊線</div>
+      <div class="tok-section-body">
+        <div class="tok-row"><span class="tok-label">折扣強調色</span><div class="tok-color"><input type="color" id="t-accent" value="#D85A30" class="swatch" oninput="ap()"><input class="tok-hex" id="t-accent-hex" value="#D85A30" oninput="sc('t-accent','t-accent-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">主打時間欄背景</span><div class="tok-color"><input type="color" id="t-accent-bg" value="#FAECE7" class="swatch" oninput="ap()"><input class="tok-hex" id="t-accent-bg-hex" value="#FAECE7" oninput="sc('t-accent-bg','t-accent-bg-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">普通時間欄背景</span><div class="tok-color"><input type="color" id="t-time-bg" value="#F1EFE8" class="swatch" oninput="ap()"><input class="tok-hex" id="t-time-bg-hex" value="#F1EFE8" oninput="sc('t-time-bg','t-time-bg-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">普通時間欄文字</span><div class="tok-color"><input type="color" id="t-time-text" value="#5F5E5A" class="swatch" oninput="ap()"><input class="tok-hex" id="t-time-text-hex" value="#5F5E5A" oninput="sc('t-time-text','t-time-text-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">卡片邊線</span><div class="tok-color"><input type="color" id="t-border" value="#D3D1C7" class="swatch" oninput="ap()"><input class="tok-hex" id="t-border-hex" value="#D3D1C7" oninput="sc('t-border','t-border-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">主打邊線</span><div class="tok-color"><input type="color" id="t-feat-border" value="#D85A30" class="swatch" oninput="ap()"><input class="tok-hex" id="t-feat-border-hex" value="#D85A30" oninput="sc('t-feat-border','t-feat-border-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">Badge 普通色</span><div class="tok-color"><input type="color" id="t-badge" value="#1a1a2e" class="swatch" oninput="ap()"><input class="tok-hex" id="t-badge-hex" value="#1a1a2e" oninput="sc('t-badge','t-badge-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">Promo 背景</span><div class="tok-color"><input type="color" id="t-promo-bg" value="#FAEEDA" class="swatch" oninput="ap()"><input class="tok-hex" id="t-promo-bg-hex" value="#FAEEDA" oninput="sc('t-promo-bg','t-promo-bg-hex')"></div></div>
+        <div class="tok-row"><span class="tok-label">Promo 文字</span><div class="tok-color"><input type="color" id="t-promo-text" value="#854F0B" class="swatch" oninput="ap()"><input class="tok-hex" id="t-promo-text-hex" value="#854F0B" oninput="sc('t-promo-text','t-promo-text-hex')"></div></div>
+      </div>
+    </div>
+
+    <div class="tok-section">
+      <div class="tok-section-head">Tag 顏色（左=背景 右=文字）</div>
+      <div class="tok-section-body">
+        <div class="tok-row"><span class="tok-label">紅</span><div class="tok-color"><input type="color" id="t-tag-red-bg" value="#FAECE7" class="swatch" oninput="ap()"><input type="color" id="t-tag-red-text" value="#993C1D" class="swatch" oninput="ap()"></div></div>
+        <div class="tok-row"><span class="tok-label">藍</span><div class="tok-color"><input type="color" id="t-tag-blue-bg" value="#E6F1FB" class="swatch" oninput="ap()"><input type="color" id="t-tag-blue-text" value="#185FA5" class="swatch" oninput="ap()"></div></div>
+        <div class="tok-row"><span class="tok-label">紫</span><div class="tok-color"><input type="color" id="t-tag-purple-bg" value="#EEEDFE" class="swatch" oninput="ap()"><input type="color" id="t-tag-purple-text" value="#534AB7" class="swatch" oninput="ap()"></div></div>
+      </div>
+    </div>
+
+    <div class="tok-section">
+      <div class="tok-section-head">字級 (px)</div>
+      <div class="tok-section-body">
+        <div class="tok-row"><span class="tok-label">商品名稱</span><input type="number" class="tok-num" id="t-fs-name" value="13" min="9" max="24" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">折扣價格</span><input type="number" class="tok-num" id="t-fs-price" value="15" min="9" max="28" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">時間欄</span><input type="number" class="tok-num" id="t-fs-time" value="12" min="9" max="20" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Chip / Tag</span><input type="number" class="tok-num" id="t-fs-chip" value="10" min="8" max="16" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Day Badge</span><input type="number" class="tok-num" id="t-fs-badge" value="12" min="9" max="18" oninput="ap()"></div>
+      </div>
+    </div>
+
+    <div class="tok-section">
+      <div class="tok-section-head">圓角 / 間距 (px)</div>
+      <div class="tok-section-body">
+        <div class="tok-row"><span class="tok-label">Slot 圓角</span><input type="number" class="tok-num" id="t-r-slot" value="10" min="0" max="24" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Tag 圓角</span><input type="number" class="tok-num" id="t-r-tag" value="9" min="0" max="24" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Badge 圓角</span><input type="number" class="tok-num" id="t-r-badge" value="20" min="0" max="24" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Slot 內距</span><input type="number" class="tok-num" id="t-p-slot" value="10" min="4" max="24" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">Slot 間距</span><input type="number" class="tok-num" id="t-gap-slot" value="6" min="2" max="20" oninput="ap()"></div>
+        <div class="tok-row"><span class="tok-label">時間欄寬</span><input type="number" class="tok-num" id="t-w-time" value="62" min="40" max="100" oninput="ap()"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- COL 2: DATA -->
+<div class="panel">
+  <div class="panel-header"><div class="panel-title">活動資料</div></div>
+  <div class="panel-body">
+    <div id="days-editor"></div>
+    <button class="btn-add" onclick="addDay()">＋ 新增天</button>
+    <div class="hr"></div>
+    <div class="promo-section">
+      <div class="promo-section-head">
+        <span class="promo-section-title">Promo Bar</span>
+        <button class="btn-xs" onclick="addPromoRow()">＋ 新增行</button>
+      </div>
+      <div class="promo-section-body" id="promo-editor"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COL 3: PREVIEW -->
+<div class="preview-panel">
+  <div id="preview-area"></div>
+</div>
+
+</div>
+
+<script>
+let T={}, currentView='both', dragDi=null, dragSrc=null;
+
+let promoRows=[
+  {code:'26TKT500', text:'天天折 $500 日韓泰多航線機票 立即享'},
+  {code:'', text:'會員日搶先場！歐美紐澳、澎湖花火節 指定商品滿額現折'}
+];
+
+let days=[
+  {label:'4/7 韓國',sub:'整點開搶',featured:false,slots:[
+    {layout:'single',time:'11:00',name:'韓國人氣景點',price:'折 $111',tag:'',tagType:'red',items:'首爾樂天世界,釜山樂天世界,首爾樂天世界塔,水族館'},
+    {layout:'single',time:'15:00',name:'韓國 eSIM',price:'$12',tag:'eSIM',tagType:'blue',items:''}
+  ]},
+  {label:'4/8 東南亞',sub:'整點開搶',featured:false,slots:[
+    {layout:'single',time:'11:00',name:'東南亞人氣景點',price:'折 $111',tag:'',tagType:'red',items:'泰國大象體驗,新加坡海洋館,越南 Kiss of The Sea,菲律賓鯨鯊浮潛'},
+    {layout:'single',time:'15:00',name:'東南亞 eSIM',price:'$12',tag:'eSIM',tagType:'blue',items:''}
+  ]},
+  {label:'4/9 日本',sub:'整點開搶',featured:false,slots:[
+    {layout:'single',time:'11:00',name:'日本票券交通',price:'折 $111',tag:'',tagType:'red',items:'大阪周遊卡,日本樂高樂園,日本鐵路'},
+    {layout:'single',time:'15:00',name:'日本 eSIM',price:'$12',tag:'eSIM',tagType:'blue',items:''}
+  ]},
+  {label:'4/10 當日',sub:'6 時段接力開搶',featured:true,slots:[
+    {layout:'single',time:'11:00',name:'台灣人氣景點',price:'折 $111',tag:'',tagType:'red',items:'台北101,屏東海生館,宜蘭太平山,澎湖南方四島'},
+    {layout:'split',time:'12:00',left:{name:'指定品類',price:'1折神券',tag:'限時12分',tagType:'red'},right:{name:'黑鑽 點數12倍送\n白金 點數6倍送',price:'',tag:'',tagType:'red'}},
+    {layout:'single',time:'13:00',name:'人氣商品',price:'買1送1',tag:'',tagType:'red',items:''},
+    {layout:'split',time:'14:00',left:{name:'虎航石垣島機票',price:'$6,499',tag:'含稅$10,900',tagType:'purple'},right:{name:'虎航石垣島機加酒',price:'$10,900',tag:'',tagType:'purple'}},
+    {layout:'split',time:'15:00',left:{name:'KKHOTEL 精選飯店',price:'現折 $777',tag:'',tagType:'red'},right:{name:'日本 eSIM',price:'只要 $12',tag:'eSIM',tagType:'blue'}},
+    {layout:'single',time:'16:00',name:'歐美紐澳樂園票',price:'5折起',tag:'',tagType:'red',items:''}
+  ]}
+];
+
+const g=id=>document.getElementById(id);
+
+function rt(){
+  T={
+    accent:g('t-accent').value, accentBg:g('t-accent-bg').value,
+    timeBg:g('t-time-bg').value, timeText:g('t-time-text').value,
+    border:g('t-border').value, featBorder:g('t-feat-border').value,
+    badge:g('t-badge').value, promoBg:g('t-promo-bg').value, promoText:g('t-promo-text').value,
+    tagRedBg:g('t-tag-red-bg').value, tagRedText:g('t-tag-red-text').value,
+    tagBlueBg:g('t-tag-blue-bg').value, tagBlueText:g('t-tag-blue-text').value,
+    tagPurpleBg:g('t-tag-purple-bg').value, tagPurpleText:g('t-tag-purple-text').value,
+    fsName:+g('t-fs-name').value, fsPrice:+g('t-fs-price').value,
+    fsTime:+g('t-fs-time').value, fsChip:+g('t-fs-chip').value, fsBadge:+g('t-fs-badge').value,
+    rSlot:+g('t-r-slot').value, rTag:+g('t-r-tag').value, rBadge:+g('t-r-badge').value,
+    pSlot:+g('t-p-slot').value, gapSlot:+g('t-gap-slot').value, wTime:+g('t-w-time').value,
+  };
+}
+
+function sc(pid,hid){
+  const v=g(hid).value;
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) g(pid).value=v;
+  ap();
+}
+function ap(){
+  ['accent','accent-bg','time-bg','time-text','border','feat-border','badge','promo-bg','promo-text'].forEach(k=>{
+    const p=g('t-'+k), h=g('t-'+k+'-hex');
+    if(p&&h&&document.activeElement!==h) h.value=p.value;
+  });
+  rt(); render();
+}
+
+function tsty(t){
+  return t==='blue'?`background:${T.tagBlueBg};color:${T.tagBlueText}`
+        :t==='purple'?`background:${T.tagPurpleBg};color:${T.tagPurpleText}`
+        :`background:${T.tagRedBg};color:${T.tagRedText}`;
+}
+function tHtml(tag,type){
+  return tag?`<span style="font-size:${T.fsChip}px;padding:2px 7px;border-radius:${T.rTag}px;font-weight:600;white-space:nowrap;${tsty(type)}">${tag}</span>`:'';
+}
+
+function offerCol(o){
+  const lines=o.name.split('\n').map(l=>`<div>${l}</div>`).join('');
+  return `<div style="display:flex;flex-direction:column;gap:4px;justify-content:center">
+    <div style="font-size:${T.fsName}px;font-weight:600;color:#111;line-height:1.45">${lines}</div>
+    ${tHtml(o.tag,o.tagType)}
+    ${o.price?`<span style="font-size:${T.fsPrice}px;font-weight:700;color:${T.accent}">${o.price}</span>`:''}
+  </div>`;
+}
+
+function renderSlot(slot,featured){
+  const bdr=featured?T.featBorder:T.border;
+  const tbg=featured?T.accentBg:T.timeBg;
+  const ttxt=featured?T.tagRedText:T.timeText;
+  const p=T.pSlot, pl=p+4;
+  let body;
+  if(slot.layout==='split'){
+    body=`<div style="display:grid;grid-template-columns:1fr 1fr;align-items:stretch">
+      <div style="padding:${p}px ${pl}px;border-right:1px solid ${bdr}">${offerCol(slot.left)}</div>
+      <div style="padding:${p}px ${pl}px">${offerCol(slot.right)}</div>
+    </div>`;
+  } else {
+    const chips=(slot.items||'').split(',').map(s=>s.trim()).filter(Boolean)
+      .map(s=>`<span style="font-size:${T.fsChip}px;padding:2px 7px;border-radius:6px;background:#f0efe9;border:1px solid ${T.border};color:#666">${s}</span>`).join('');
+    body=`<div style="padding:${p}px ${pl}px;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+        <span style="font-size:${T.fsName}px;font-weight:600;color:#111">${slot.name}</span>
+        <span style="font-size:${T.fsPrice}px;font-weight:700;color:${T.accent}">${slot.price}</span>
+        ${tHtml(slot.tag,slot.tagType)}
+      </div>
+      ${chips?`<div style="display:flex;flex-wrap:wrap;gap:3px">${chips}</div>`:''}
+    </div>`;
+  }
+  return `<div style="display:grid;grid-template-columns:${T.wTime}px 1fr;border:1px solid ${bdr};border-radius:${T.rSlot}px;overflow:hidden;background:#fff">
+    <div style="background:${tbg};display:flex;align-items:center;justify-content:center;border-right:1px solid ${bdr};padding:${p}px 0">
+      <span style="font-size:${T.fsTime}px;font-weight:600;color:${ttxt}">${slot.time}</span>
+    </div>${body}
+  </div>`;
+}
+
+function renderDay(day,featGrid){
+  const sh=day.slots.map(s=>renderSlot(s,day.featured)).join('');
+  const wrap=(day.featured&&featGrid)
+    ?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:${T.gapSlot}px">${sh}</div>`
+    :`<div style="display:flex;flex-direction:column;gap:${T.gapSlot}px">${sh}</div>`;
+  return `<div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="background:${day.featured?T.accent:T.badge};color:#fff;font-size:${T.fsBadge}px;font-weight:700;padding:3px 12px;border-radius:${T.rBadge}px;white-space:nowrap">${day.label}</span>
+      <span style="font-size:11px;color:#999;white-space:nowrap">${day.sub}</span>
+      <div style="flex:1;height:1px;background:#e5e5e5"></div>
+    </div>${wrap}
+  </div>`;
+}
+
+function renderPromoBar(){
+  const rows=promoRows.map(row=>{
+    const codeHtml=row.code
+      ?`<span style="background:#fff;border:1px solid ${T.promoText}55;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;color:${T.promoText};font-family:monospace;white-space:nowrap">${row.code}</span>`:'';
+    return `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">${codeHtml}<span style="font-size:12px;color:${T.promoText}">${row.text}</span></div>`;
+  }).join(`<div style="height:1px;background:${T.promoText}22;margin:4px 0"></div>`);
+  return `<div style="background:${T.promoBg};border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:6px;margin-top:14px">${rows}</div>`;
+}
+
+function render(){
+  rt();
+  const normal=days.filter(d=>!d.featured), feat=days.filter(d=>d.featured);
+  const promo=renderPromoBar();
+  let html='<div class="frames-wrap">';
+  if(currentView!=='pc'){
+    const inner=days.map(d=>`<div style="margin-bottom:16px">${renderDay(d,false)}</div>`).join('')+promo;
+    html+=`<div><div class="frame-label">Mobile — 390px</div><div class="frame-box" style="width:390px;padding:18px 14px">${inner}</div></div>`;
+  }
+  if(currentView!=='mobile'){
+    const top=normal.length?`<div style="display:grid;grid-template-columns:repeat(${Math.min(normal.length,3)},1fr);gap:16px 20px;margin-bottom:18px;align-items:start">${normal.map(d=>renderDay(d,false)).join('')}</div>`:'';
+    html+=`<div><div class="frame-label">PC — 960px</div><div class="frame-box" style="width:960px;padding:24px 28px">${top}${feat.map(d=>renderDay(d,true)).join('')}${promo}</div></div>`;
+  }
+  html+='</div>';
+  g('preview-area').innerHTML=html;
+}
+
+function sv(v){
+  currentView=v;
+  ['both','mobile','pc'].forEach(k=>g('vbtn-'+k).classList.toggle('active',k===v));
+  render();
+}
+
+async function dlFrame(target){
+  const ids={mobile:'dl-m',pc:'dl-p',both:'dl-b'};
+  const btn=g(ids[target]);
+  const orig=btn.textContent; btn.textContent='處理中…'; btn.disabled=true;
+
+  rt();
+  const normal=days.filter(d=>!d.featured), feat=days.filter(d=>d.featured);
+  const promo=renderPromoBar();
+
+  const mInner=days.map(d=>`<div style="margin-bottom:16px">${renderDay(d,false)}</div>`).join('')+promo;
+  const pcTop=normal.length?`<div style="display:grid;grid-template-columns:repeat(${Math.min(normal.length,3)},1fr);gap:16px 20px;margin-bottom:18px;align-items:start">${normal.map(d=>renderDay(d,false)).join('')}</div>`:'';
+
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;';
+
+  if(target==='mobile'||target==='both')
+    wrap.innerHTML+=`<div id="dl-mobile" style="width:390px;background:#fff;padding:20px 16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">${mInner}</div>`;
+  if(target==='pc'||target==='both')
+    wrap.innerHTML+=`<div id="dl-pc" style="width:960px;background:#fff;padding:24px 28px;font-family:-apple-system,BlinkMacSystemFont,sans-serif">${pcTop}${feat.map(d=>renderDay(d,true)).join('')}${promo}</div>`;
+
+  document.body.appendChild(wrap);
+
+  try{
+    const opts={scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false};
+    let canvas;
+    if(target!=='both'){
+      canvas=await html2canvas(wrap.querySelector(target==='mobile'?'#dl-mobile':'#dl-pc'),opts);
+    } else {
+      const els=[wrap.querySelector('#dl-mobile'),wrap.querySelector('#dl-pc')].filter(Boolean);
+      const cs=await Promise.all(els.map(el=>html2canvas(el,opts)));
+      const W=Math.max(...cs.map(c=>c.width)), H=cs.reduce((a,c)=>a+c.height,0)+40;
+      canvas=document.createElement('canvas'); canvas.width=W; canvas.height=H;
+      const ctx=canvas.getContext('2d'); ctx.fillStyle='#f0efe9'; ctx.fillRect(0,0,W,H);
+      let y=20; cs.forEach(c=>{ctx.drawImage(c,0,y);y+=c.height+20;});
+    }
+    const a=document.createElement('a');
+    a.download=`flash-sale-${target}-${new Date().toISOString().slice(0,10)}.png`;
+    a.href=canvas.toDataURL('image/png'); a.click();
+  } finally {
+    document.body.removeChild(wrap);
+    btn.textContent=orig; btn.disabled=false;
+  }
+}
+
+// promo
+function addPromoRow(){promoRows.push({code:'',text:''});buildPromoEditor();}
+function removePromoRow(i){promoRows.splice(i,1);buildPromoEditor();}
+function buildPromoEditor(){
+  g('promo-editor').innerHTML=promoRows.map((row,i)=>`
+    <div class="promo-row-ed">
+      <div style="flex:0 0 76px">
+        <div class="field-label">折扣碼</div>
+        <input type="text" value="${row.code}" placeholder="留空隱藏" oninput="promoRows[${i}].code=this.value;render()">
+      </div>
+      <div style="flex:1">
+        <div class="field-label">說明文字</div>
+        <input type="text" value="${row.text}" oninput="promoRows[${i}].text=this.value;render()">
+      </div>
+      <button class="btn-xs" onclick="removePromoRow(${i})">✕</button>
+    </div>`).join('');
+  render();
+}
+
+// days
+function mkSlot(){return {layout:'single',time:'11:00',name:'商品名稱',price:'折 $111',tag:'',tagType:'red',items:''};}
+function addDay(){days.push({label:'新日期',sub:'整點開搶',featured:false,slots:[mkSlot()]});buildEditor();render();}
+function addSlot(di){days[di].slots.push(mkSlot());buildEditor();render();}
+function removeSlot(di,si){days[di].slots.splice(si,1);buildEditor();render();}
+function removeDay(di){days.splice(di,1);buildEditor();render();}
+function toggleDay(di){const b=g('db-'+di);b.style.display=b.style.display==='none'?'':'none';}
+
+function switchLayout(di,si){
+  const s=days[di].slots[si];
+  if(s.layout==='single'){
+    days[di].slots[si]={layout:'split',time:s.time,left:{name:s.name,price:s.price,tag:s.tag,tagType:s.tagType},right:{name:'右欄名稱',price:'$12',tag:'',tagType:'blue'}};
+  } else {
+    days[di].slots[si]={layout:'single',time:s.time,name:s.left.name,price:s.left.price,tag:s.left.tag,tagType:s.left.tagType,items:''};
+  }
+  buildEditor();render();
+}
+
+function onDragStart(e,di,si){dragDi=di;dragSrc=si;e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
+function onDragEnd(e){e.currentTarget.classList.remove('dragging');document.querySelectorAll('.slot-ed').forEach(el=>el.classList.remove('drag-over'));}
+function onDragOver(e,di,si){e.preventDefault();if(di!==dragDi||si===dragSrc)return;document.querySelectorAll('.slot-ed').forEach(el=>el.classList.remove('drag-over'));e.currentTarget.classList.add('drag-over');}
+function onDrop(e,di,si){e.preventDefault();if(di!==dragDi||si===dragSrc)return;const arr=days[di].slots,item=arr.splice(dragSrc,1)[0];arr.splice(si,0,item);buildEditor();render();}
+
+function edSingle(s,di,si){
+  return `<div class="slot-ed-body">
+    <div class="field-row">
+      <div><div class="field-label">時間</div><input type="text" value="${s.time}" oninput="days[${di}].slots[${si}].time=this.value;render()"></div>
+      <div><div class="field-label">價格</div><input type="text" value="${s.price}" oninput="days[${di}].slots[${si}].price=this.value;render()"></div>
+    </div>
+    <div><div class="field-label">商品名稱</div><input type="text" value="${s.name}" oninput="days[${di}].slots[${si}].name=this.value;render()"></div>
+    <div class="field-row">
+      <div><div class="field-label">標籤文字</div><input type="text" value="${s.tag||''}" oninput="days[${di}].slots[${si}].tag=this.value;render()"></div>
+      <div><div class="field-label">標籤色</div><select onchange="days[${di}].slots[${si}].tagType=this.value;render()"><option value="red" ${s.tagType==='red'?'selected':''}>紅</option><option value="blue" ${s.tagType==='blue'?'selected':''}>藍</option><option value="purple" ${s.tagType==='purple'?'selected':''}>紫</option></select></div>
+    </div>
+    <div><div class="field-label">Chip 商品（逗號分隔）</div><textarea oninput="days[${di}].slots[${si}].items=this.value;render()">${s.items||''}</textarea></div>
+  </div>`;
+}
+
+function edSplit(s,di,si){
+  const col=(side,label)=>`<div class="split-col">
+    <div class="split-col-title">${label}</div>
+    <div class="field-label">名稱</div><input type="text" value="${s[side].name}" oninput="days[${di}].slots[${si}].${side}.name=this.value;render()" style="margin-bottom:3px">
+    <div class="field-label">價格</div><input type="text" value="${s[side].price}" oninput="days[${di}].slots[${si}].${side}.price=this.value;render()" style="margin-bottom:3px">
+    <div class="field-label">標籤</div><input type="text" value="${s[side].tag||''}" oninput="days[${di}].slots[${si}].${side}.tag=this.value;render()" style="margin-bottom:3px">
+    <div class="field-label">標籤色</div><select onchange="days[${di}].slots[${si}].${side}.tagType=this.value;render()"><option value="red" ${s[side].tagType==='red'?'selected':''}>紅</option><option value="blue" ${s[side].tagType==='blue'?'selected':''}>藍</option><option value="purple" ${s[side].tagType==='purple'?'selected':''}>紫</option></select>
+  </div>`;
+  return `<div class="slot-ed-body">
+    <div><div class="field-label">時間</div><input type="text" value="${s.time}" oninput="days[${di}].slots[${si}].time=this.value;render()"></div>
+    <div class="split-cols">${col('left','左欄')}${col('right','右欄')}</div>
+  </div>`;
+}
+
+function buildEditor(){
+  g('days-editor').innerHTML=days.map((day,di)=>{
+    const slotsHtml=day.slots.map((slot,si)=>{
+      const isS=slot.layout==='single';
+      return `<div class="slot-ed" draggable="true"
+        ondragstart="onDragStart(event,${di},${si})"
+        ondragend="onDragEnd(event)"
+        ondragover="onDragOver(event,${di},${si})"
+        ondrop="onDrop(event,${di},${si})">
+        <div class="slot-ed-head">
+          <span class="drag-handle">⠿</span>
+          <span class="slot-ed-label">${slot.time} ${isS?slot.name:'雙欄'}</span>
+          <div class="layout-toggle">
+            <button class="layout-btn ${isS?'active':''}" onclick="event.stopPropagation();${isS?'':('switchLayout('+di+','+si+')')}">單</button>
+            <button class="layout-btn ${!isS?'active':''}" onclick="event.stopPropagation();${!isS?'':('switchLayout('+di+','+si+')')}">雙</button>
+          </div>
+          <button class="btn-xs" onclick="removeSlot(${di},${si})">✕</button>
+        </div>
+        ${isS?edSingle(slot,di,si):edSplit(slot,di,si)}
+      </div>`;
+    }).join('');
+    return `<div class="day-card">
+      <div class="day-head" onclick="toggleDay(${di})">
+        <span class="day-head-label">${day.label}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <label style="font-size:10px;color:#888;display:flex;align-items:center;gap:3px;font-weight:normal" onclick="event.stopPropagation()">
+            <input type="checkbox" ${day.featured?'checked':''} onchange="days[${di}].featured=this.checked;buildEditor();render()"> 主打
+          </label>
+          <button class="btn-xs" onclick="event.stopPropagation();removeDay(${di})">✕</button>
+        </div>
+      </div>
+      <div class="day-body" id="db-${di}">
+        <div class="field-row">
+          <div><div class="field-label">標題</div><input type="text" value="${day.label}" oninput="days[${di}].label=this.value;render()"></div>
+          <div><div class="field-label">副標</div><input type="text" value="${day.sub}" oninput="days[${di}].sub=this.value;render()"></div>
+        </div>
+        ${slotsHtml}
+        <button class="btn-add" onclick="addSlot(${di})">＋ 新增時段</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+rt(); buildEditor(); buildPromoEditor();
+</script>
+</body>
+</html>
